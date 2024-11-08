@@ -675,10 +675,19 @@ def update_gantt_chart(selected_project_id, milestones_data):
         return go.Figure()
 
     # Chuyển đổi các cột ngày tháng về datetime
-    for col in ['MilestoneStartDate', 'MilestoneEndDate', 'ActualCompletionDate']:
+    date_columns = ['MilestoneStartDate', 'MilestoneEndDate', 'ActualCompletionDate']
+    for col in date_columns:
         if col in selected_milestones.columns:
             selected_milestones[col] = pd.to_datetime(selected_milestones[col], errors='coerce')
 
+    # Loại bỏ các hàng có giá trị ngày tháng thiếu
+    selected_milestones = selected_milestones.dropna(subset=['MilestoneStartDate', 'MilestoneEndDate'])
+
+    # Tiếp tục nếu DataFrame không rỗng sau khi loại bỏ giá trị thiếu
+    if selected_milestones.empty:
+        return go.Figure()
+
+    # Tạo biểu đồ Gantt
     fig = px.timeline(
         selected_milestones,
         x_start="MilestoneStartDate",
@@ -706,8 +715,10 @@ def update_gantt_chart(selected_project_id, milestones_data):
         showlegend=True,
         margin=dict(l=20, r=20, t=20, b=20),
         hoverlabel=dict(bgcolor="white", font_size=12),
+        xaxis=dict(type='date')  # Đảm bảo trục x là kiểu ngày tháng
     )
     return fig
+
 
 
 # Cập nhật biểu đồ chi phí theo thời gian
