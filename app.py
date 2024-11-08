@@ -658,7 +658,6 @@ def update_project_details(selected_project_id, projects_extended_data):
 
 # Các callback khác cập nhật biểu đồ, bảng, và các thành phần khác
 # (Các hàm này giữ nguyên như trong mã của bạn)
-
 # Cập nhật biểu đồ Gantt
 @app.callback(
     Output('gantt-chart', 'figure'),
@@ -683,43 +682,62 @@ def update_gantt_chart(selected_project_id, milestones_data):
     # Loại bỏ các hàng có giá trị ngày tháng thiếu
     selected_milestones = selected_milestones.dropna(subset=['MilestoneStartDate', 'MilestoneEndDate'])
 
-    # Tiếp tục nếu DataFrame không rỗng sau khi loại bỏ giá trị thiếu
     if selected_milestones.empty:
         return go.Figure()
 
-    # Tạo biểu đồ Gantt
-    fig = px.timeline(
-        selected_milestones,
-        x_start="MilestoneStartDate",
-        x_end="MilestoneEndDate",
-        y="MilestoneName",
-        color="Status" if "Status" in selected_milestones.columns else None,
-        hover_data={
-            "Description": True,
-            "PercentComplete": True,
-            "MilestoneOwner": True,
-            "MilestoneStartDate": False,
-            "MilestoneEndDate": False,
-        },
-        template='plotly_white',
-        color_discrete_map={
-            'Not Started': 'lightgray',
-            'In Progress': '#17a2b8',
-            'Completed': '#28a745',
-            'Delayed': '#dc3545',
-        } if "Status" in selected_milestones.columns else None
-    )
+    # Tính toán độ dài (duration) của mỗi milestone
+    selected_milestones['Duration'] = (selected_milestones['MilestoneEndDate'] - selected_milestones['MilestoneStartDate']).dt.days
+
+    # Tạo danh sách các thanh (bars)
+    bars = []
+    colors = {
+        'Not Started': 'lightgray',
+        'In Progress': '#17a2b8',
+        'Completed': '#28a745',
+        'Delayed': '#dc3545',
+    }
+
+    for idx, row in selected_milestones.iterrows():
+        bars.append(go.Bar(
+            x=[row['MilestoneEndDate']],
+            y=[row['MilestoneName']],
+            base=[row['MilestoneStartDate']],
+            orientation='h',
+            width=0.4,
+            marker=dict(color=colors.get(row['Status'], 'lightgray')),
+            hovertemplate=(
+                f"Status: {row['Status']}<br>"
+                f"Milestone Name: {row['MilestoneName']}<br>"
+                f"Description: {row['Description']}<br>"
+                f"Percent Complete: {row['PercentComplete']}%<br>"
+                f"Milestone Owner: {row['MilestoneOwner']}<br>"
+                f"Start Date: {row['MilestoneStartDate'].strftime('%Y-%m-%d')}<br>"
+                f"End Date: {row['MilestoneEndDate'].strftime('%Y-%m-%d')}<br>"
+                "<extra></extra>"
+            ),
+            showlegend=False
+        ))
+
+    # Tạo biểu đồ Gantt sử dụng go.Figure
+    fig = go.Figure(data=bars)
 
     fig.update_yaxes(autorange="reversed")
     fig.update_layout(
-        showlegend=True,
+        barmode='overlay',
+        showlegend=False,
         margin=dict(l=20, r=20, t=20, b=20),
         hoverlabel=dict(bgcolor="white", font_size=12),
-        xaxis=dict(type='date')  # Đảm bảo trục x là kiểu ngày tháng
+        xaxis=dict(
+            type='date',
+            title='Thời gian'
+        ),
+        yaxis=dict(
+            title='Milestone',
+            automargin=True
+        )
     )
+
     return fig
-
-
 
 # Cập nhật biểu đồ chi phí theo thời gian
 @app.callback(
