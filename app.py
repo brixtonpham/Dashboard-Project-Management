@@ -665,31 +665,29 @@ def update_project_details(selected_project_id, projects_extended_data):
      Input('milestones-data', 'data')]
 )
 def update_gantt_chart(selected_project_id, milestones_data):
-    if milestones_data is None or selected_project_id is None:
-        return go.Figure()
+    if not milestones_data or not selected_project_id:
+        return go.Figure()  # Return an empty figure
+
+    # Convert JSON data to DataFrame
     df_milestones = pd.read_json(milestones_data, orient='split')
-    selected_milestones = df_milestones[df_milestones['ProjectID'] == selected_project_id]
+    selected_milestones = df_milestones[df_milestones['ProjectID'] == selected_project_id].copy()
 
     if selected_milestones.empty:
         return go.Figure()
 
-    # Chuyển đổi các cột ngày tháng về datetime
+    # Convert relevant columns to datetime
     date_columns = ['MilestoneStartDate', 'MilestoneEndDate', 'ActualCompletionDate']
     for col in date_columns:
         if col in selected_milestones.columns:
             selected_milestones[col] = pd.to_datetime(selected_milestones[col], errors='coerce')
 
-    # Loại bỏ các hàng có giá trị ngày tháng thiếu
-    selected_milestones = selected_milestones.dropna(subset=['MilestoneStartDate', 'MilestoneEndDate'])
+    # Drop rows with missing start or end dates
+    selected_milestones.dropna(subset=['MilestoneStartDate', 'MilestoneEndDate'], inplace=True)
 
     if selected_milestones.empty:
         return go.Figure()
 
-    # Tính toán độ dài (duration) của mỗi milestone
-    selected_milestones['Duration'] = (selected_milestones['MilestoneEndDate'] - selected_milestones['MilestoneStartDate']).dt.days
-
-    # Tạo danh sách các thanh (bars)
-    bars = []
+    # Define color mapping based on Status
     colors = {
         'Not Started': 'lightgray',
         'In Progress': '#17a2b8',
@@ -697,48 +695,55 @@ def update_gantt_chart(selected_project_id, milestones_data):
         'Delayed': '#dc3545',
     }
 
-    for idx, row in selected_milestones.iterrows():
-        bars.append(go.Bar(
-            x=[row['MilestoneEndDate']],
-            y=[row['MilestoneName']],
-            base=[row['MilestoneStartDate']],
-            orientation='h',
-            width=0.4,
-            marker=dict(color=colors.get(row['Status'], 'lightgray')),
-            hovertemplate=(
-                f"Status: {row['Status']}<br>"
-                f"Milestone Name: {row['MilestoneName']}<br>"
-                f"Description: {row['Description']}<br>"
-                f"Percent Complete: {row['PercentComplete']}%<br>"
-                f"Milestone Owner: {row['MilestoneOwner']}<br>"
-                f"Start Date: {row['MilestoneStartDate'].strftime('%Y-%m-%d')}<br>"
-                f"End Date: {row['MilestoneEndDate'].strftime('%Y-%m-%d')}<br>"
-                "<extra></extra>"
-            ),
-            showlegend=False
-        ))
+    # Create the timeline using Plotly Express with 'plotly' template
+    fig = px.timeline(
+        selected_milestones,
+        x_start='MilestoneStartDate',
+        x_end='MilestoneEndDate',
+        y='MilestoneName',
+        color='Status',
+        color_discrete_map=colors,
+        hover_data={
+            'Description': True,
+            'PercentComplete': True,
+            'MilestoneOwner': True,
+            # Exclude 'MilestoneStartDate' and 'MilestoneEndDate' from hover_data
+        },
+        labels={
+            'MilestoneName': 'Milestone',
+            'Status': 'Status',
+            'MilestoneStartDate': 'Start Date',
+            'MilestoneEndDate': 'End Date'
+        },
+        template='plotly'  # Changed from 'plotly_white' to 'plotly'
+    )
 
-    # Tạo biểu đồ Gantt sử dụng go.Figure
-    fig = go.Figure(data=bars)
-
-    fig.update_yaxes(autorange="reversed")
-    fig.update_layout(
-        barmode='overlay',
-        showlegend=False,
-        margin=dict(l=20, r=20, t=20, b=20),
-        hoverlabel=dict(bgcolor="white", font_size=12),
-        xaxis=dict(
-            type='date',
-            title='Thời gian'
-        ),
-        yaxis=dict(
-            title='Milestone',
-            automargin=True
+    # Customize hovertemplate for better control over hover information
+    fig.update_traces(
+        hovertemplate=(
+            "Milestone: %{y}<br>"
+            "Status: %{color}<br>"  # Use %{color} to display the Status text
+            "Description: %{customdata[0]}<br>"
+            "Percent Complete: %{customdata[1]}%<br>"
+            "Milestone Owner: %{customdata[2]}<br>"
+            "Start Date: %{x|%Y-%m-%d}<br>"
+            "End Date: %{x_end|%Y-%m-%d}<br>"
+            "<extra></extra>"
         )
     )
 
-    return fig
+    # Update layout for better aesthetics
+    fig.update_yaxes(autorange="reversed")  # Ensures the first milestone is at the top
+    fig.update_layout(
+        showlegend=True,
+        margin=dict(l=40, r=40, t=40, b=40),
+        hoverlabel=dict(bgcolor="white", font_size=12),
+        xaxis_title='Thời gian',  # 'Time' in Vietnamese
+        yaxis_title='Milestone',
+        bargap=0.1  # Adjust gap between bars if necessary
+    )
 
+    return fig
 # Cập nhật biểu đồ chi phí theo thời gian
 @app.callback(
     Output('cost-over-time-chart', 'figure'),
